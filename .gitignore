@@ -1,0 +1,10 @@
+.idea/
+
+Agent/build/
+Agent/dist/
+Agent/main.spec
+
+monitoring.db
+usb.ids
+
+.env
