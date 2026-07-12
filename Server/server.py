@@ -4,17 +4,21 @@ from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import sqlite3
 import json
 import asyncio
 import urllib.request
 import time
 import os
-from dotenv import load_dotenv
-load_dotenv()
 
-DEBUG = os.getenv("DEBUG", True)
-NTFY_URL = os.getenv("NTFY_URL")
+class ServerSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+    
+    debug: bool = True
+    ntfy_url: str | None = None
+
+settings = ServerSettings()
 
 app = FastAPI()
 
@@ -67,11 +71,11 @@ class OwnerForm(BaseModel):
     name: str
 
 def send_ntfy(title, message, priority="default", tags="desktop"):
-    if not NTFY_URL:
+    if not settings.ntfy_url:
         return
     try:
         req = urllib.request.Request(
-            NTFY_URL,
+            settings.ntfy_url,
             data=message.encode('utf-8'),
             headers={"Title": title, "Priority": priority, "Tags": tags}
         )
