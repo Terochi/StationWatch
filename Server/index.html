@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hardware Command Center</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
 
@@ -53,13 +53,24 @@
         </div>
     </div>
 
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center">
+        <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-sm shadow-2xl">
+            <h3 id="confirm-title" class="text-base font-bold text-white mb-2">Are you sure?</h3>
+            <p id="confirm-message" class="text-xs text-slate-400 mb-6"></p>
+            <div class="flex justify-end gap-3">
+                <button onclick="hideConfirm()" class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-semibold py-1.5 px-4 rounded-md border border-slate-700 cursor-pointer transition-colors">Cancel</button>
+                <button id="confirm-action-btn" class="text-xs bg-rose-600 hover:bg-rose-500 text-white font-bold py-1.5 px-4 rounded-md cursor-pointer transition-colors">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <main>
         <div id="pcs-container" class="grid grid-cols-1 xl:grid-cols-2 gap-6"></div>
     </main>
 
     <script>
-		const API_BASE = document.location.origin;
-        const WS_URL = `ws:/${document.location.host}/ws/dashboard`;
+        const API_BASE = `${document.location.origin}`;
+        const WS_URL = `ws://${document.location.host}/ws/dashboard`;
         let socket;
         
         let hardwareStateCache = {}; 
@@ -76,8 +87,20 @@
             return map[cat] || "🔌";
         };
 
+        function esc(prefix, rawId) {
+            try {
+                const b64 = btoa(unescape(encodeURIComponent(rawId)))
+                    .replace(/=/g, '')
+                    .replace(/\+/g, '_')
+                    .replace(/\//g, '-');
+                return `${prefix}_${b64}`;
+            } catch (e) {
+                return `${prefix}_${rawId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            }
+        }
+
         const buildOwnerSelect = (id, currentOwner, type) => `
-            <select id="${type}-owner-${id}" class="flex-1 text-xs bg-slate-950 border border-slate-700 rounded-lg p-2 focus:border-amber-500 focus:outline-none text-slate-200">
+            <select id="${esc(type + '-owner', id)}" class="flex-1 text-xs bg-slate-950 border border-slate-700 rounded-lg p-2 focus:border-amber-500 focus:outline-none text-slate-200">
                 <option value="">Unassigned</option>
                 ${teamOwners.map(o => `<option value="${o.name}" ${currentOwner === o.name ? 'selected' : ''}>${o.name}</option>`).join('')}
             </select>
@@ -86,6 +109,23 @@
         function extractExeName(path) {
             if (!path) return "Unknown Application";
             return path.split('\\').pop().split('/').pop();
+        }
+
+        function showConfirm(title, message, callback, actionLabel = "Delete") {
+            document.getElementById("confirm-title").innerText = title;
+            document.getElementById("confirm-message").innerText = message;
+            
+            const actionBtn = document.getElementById("confirm-action-btn");
+            actionBtn.innerText = actionLabel;
+            actionBtn.onclick = () => {
+                if (callback) callback();
+                hideConfirm();
+            };
+            document.getElementById("confirm-modal").classList.remove("hidden");
+        }
+
+        function hideConfirm() {
+            document.getElementById("confirm-modal").classList.add("hidden");
         }
 
         async function loadInitialData() {
@@ -152,17 +192,17 @@
         function toggleEdit(deviceId) { editingDevices[deviceId] = !editingDevices[deviceId]; loadInitialData(); }
 
         async function savePC(pcId) {
-            const name = document.getElementById(`pc-name-${pcId}`).value;
-            const owner = document.getElementById(`pc-owner-${pcId}`).value;
-            await fetch(`${API_BASE}/api/pcs/${pcId}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, owner }) });
+            const name = document.getElementById(esc('pc-name', pcId)).value;
+            const owner = document.getElementById(esc('pc-owner', pcId)).value;
+            await fetch(`${API_BASE}/api/pcs/${encodeURIComponent(pcId)}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, owner }) });
             editingPCs[pcId] = false;
             loadInitialData();
         }
 
         async function saveDevice(deviceId) {
-            const name = document.getElementById(`dev-name-${deviceId}`).value;
-            const owner = document.getElementById(`dev-owner-${deviceId}`).value;
-            const category = document.getElementById(`dev-cat-${deviceId}`).value;
+            const name = document.getElementById(esc('dev-name', deviceId)).value;
+            const owner = document.getElementById(esc('dev-owner', deviceId)).value;
+            const category = document.getElementById(esc('dev-cat', deviceId)).value;
             await fetch(`${API_BASE}/api/devices/register`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id: deviceId, name, owner, category }) });
             editingDevices[deviceId] = false;
             loadInitialData();
@@ -188,8 +228,30 @@
             loadInitialData();
         }
 
+        function confirmDeletePC(pcId) {
+            showConfirm(
+                "Delete Workstation",
+                `Are you sure you want to completely delete workstation ${pcId}? Connected devices will remain but will be hidden.`,
+                async () => {
+                    await fetch(`${API_BASE}/api/pcs/${encodeURIComponent(pcId)}`, { method: 'DELETE' });
+                    loadInitialData();
+                }
+            );
+        }
+
+        function confirmDeleteDevice(deviceId) {
+            showConfirm(
+                "Delete Device",
+                `Are you sure you want to completely delete device ${deviceId}?`,
+                async () => {
+                    await fetch(`${API_BASE}/api/devices/${encodeURIComponent(deviceId)}`, { method: 'DELETE' });
+                    loadInitialData();
+                }
+            );
+        }
+
         async function lookupDevice(vid, pid, devId) {
-            const displayBox = document.getElementById(`lookup-res-${devId}`);
+            const displayBox = document.getElementById(esc('lookup-res', devId));
             displayBox.classList.remove("hidden");
             displayBox.innerHTML = `Searching server registry...`;
             try {
@@ -205,16 +267,15 @@
             const container = document.getElementById("pcs-container");
             
             if (pcs.length === 0 && container.innerHTML.trim() === "") {
-                container.innerHTML = `<div class="col-span-full text-center p-12 text-slate-500 border border-dashed border-slate-700 rounded-xl">No client agents detected. Run agent.py on a workstation.</div>`;
+                container.innerHTML = `<div class="col-span-full text-center p-12 text-slate-500 border border-dashed border-slate-700 rounded-xl">No active client agents detected. Run agent.py on a workstation.</div>`;
                 return;
-            } else if (pcs.length > 0 && container.innerText.includes("No client agents")) {
+            } else if (pcs.length > 0 && container.innerText.includes("No active client agents")) {
                 container.innerHTML = ""; 
             }
 
             pcs.forEach(pc => {
                 const isOnline = (Date.now() / 1000) - pc.last_seen < 15;
 
-                // Exclude ignored devices from the main view completely
                 const pcDevices = devices.filter(d => d.last_connected_pc === pc.id && d.is_ignored === 0);
                 pcDevices.sort((a, b) => a.is_registered - b.is_registered);
 
@@ -222,23 +283,23 @@
                 const hasPreferred = pc.preferred_exe !== null && pc.preferred_exe !== "";
                 const isMismatch = hasPreferred && pc.preferred_exe !== pc.current_exe;
 
-                let pcCard = document.getElementById(`pc-card-${pc.id}`);
+                let pcCard = document.getElementById(esc('pc-card', pc.id));
                 if (!pcCard) {
                     const newDiv = document.createElement("div");
-                    newDiv.id = `pc-card-${pc.id}`;
+                    newDiv.id = esc('pc-card', pc.id);
                     newDiv.className = `bg-slate-800/80 border rounded-2xl p-6 shadow-xl flex flex-col justify-between transition-colors`;
                     
                     newDiv.innerHTML = `
                         <div>
                             <div class="flex justify-between items-start mb-4">
-                                <div id="pc-header-${pc.id}" class="w-full mr-4"></div>
+                                <div id="${esc('pc-header', pc.id)}" class="w-full mr-4"></div>
                                 <div class="flex flex-col items-end gap-2 shrink-0 mt-1">
-                                    <span id="status-${pc.id}" class="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-md"></span>
-                                    <button onclick="toggleMonitorPC('${pc.id}')" id="monitor-btn-${pc.id}" class="text-[9px] font-extrabold uppercase px-2 py-1 rounded-md cursor-pointer transition-colors shadow-sm"></button>
+                                    <span id="${esc('status', pc.id)}" class="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-md"></span>
+                                    <button onclick="toggleMonitorPC('${pc.id}')" id="${esc('monitor-btn', pc.id)}" class="text-[9px] font-extrabold uppercase px-2 py-1 rounded-md cursor-pointer transition-colors shadow-sm"></button>
                                 </div>
                             </div>
 
-                            <div id="window-box-${pc.id}" class="border rounded-xl p-3 mb-6 transition-all duration-300">
+                            <div id="${esc('window-box', pc.id)}" class="border rounded-xl p-3 mb-6 transition-all duration-300">
                                 <div class="flex justify-between items-center mb-1">
                                     <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 block">Active Foreground Process</span>
                                     <button onclick="setPreferredExe('${pc.id}')" class="text-[9px] bg-slate-800 hover:bg-emerald-600 border border-slate-700 hover:border-emerald-500 text-white px-2 py-0.5 rounded cursor-pointer transition-colors shadow-sm">
@@ -246,23 +307,23 @@
                                     </button>
                                 </div>
                                 <div class="flex items-center gap-2 mb-1">
-                                    <div id="exe-name-${pc.id}" class="text-sm font-bold text-white truncate"></div>
-                                    <div id="mismatch-badge-${pc.id}" class="hidden text-[9px] bg-rose-500 text-white px-1.5 rounded uppercase font-bold tracking-wide">Mismatch</div>
+                                    <div id="${esc('exe-name', pc.id)}" class="text-sm font-bold text-white truncate"></div>
+                                    <div id="${esc('mismatch-badge', pc.id)}" class="hidden text-[9px] bg-rose-500 text-white px-1.5 rounded uppercase font-bold tracking-wide">Mismatch</div>
                                 </div>
-                                <div id="exe-path-${pc.id}" class="text-[10px] text-slate-400 font-mono truncate mb-1"></div>
+                                <div id="${esc('exe-path', pc.id)}" class="text-[10px] text-slate-400 font-mono truncate mb-1"></div>
                                 
                                 <div class="flex items-center justify-between border-t border-slate-700/50 pt-1 mt-1">
-                                    <div id="window-title-${pc.id}" class="text-[11px] text-slate-500 italic truncate w-1/2 pr-2"></div>
+                                    <div id="${esc('window-title', pc.id)}" class="text-[11px] text-slate-500 italic truncate w-1/2 pr-2"></div>
                                     <div class="text-[10px] text-slate-400 text-right truncate w-1/2">
-                                        Target: <span id="preferred-exe-${pc.id}" class="font-mono font-bold text-slate-300"></span>
+                                        Target: <span id="${esc('preferred-exe', pc.id)}" class="font-mono font-bold text-slate-300"></span>
                                     </div>
                                 </div>
                             </div>
 
                             <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 border-t border-slate-700/50 pt-4 flex items-center justify-between">
-                                <span>⛓️ Hardware Inventory (<span id="hw-count-${pc.id}">0</span>)</span>
+                                <span>⛓️ Hardware Inventory (<span id="${esc('hw-count', pc.id)}">0</span>)</span>
                             </h4>
-                            <div id="hw-list-${pc.id}" class="space-y-2.5"></div>
+                            <div id="${esc('hw-list', pc.id)}" class="space-y-2.5"></div>
                         </div>
                     `;
                     container.appendChild(newDiv);
@@ -271,22 +332,22 @@
 
                 pcCard.className = `bg-slate-800/80 border ${isOnline ? 'border-slate-700' : 'border-slate-800'} rounded-2xl p-6 shadow-xl flex flex-col justify-between transition-colors`;
 
-                const statusBadge = document.getElementById(`status-${pc.id}`);
+                const statusBadge = document.getElementById(esc('status', pc.id));
                 statusBadge.className = `flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-md ${isOnline ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500'}`;
                 statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}"></span>${isOnline ? 'ACTIVE' : 'OFFLINE'}`;
 
-                const monitorBtn = document.getElementById(`monitor-btn-${pc.id}`);
+                const monitorBtn = document.getElementById(esc('monitor-btn', pc.id));
                 const isMonitoring = pc.is_monitoring === 1;
                 monitorBtn.className = `text-[9px] font-extrabold uppercase px-2 py-1 rounded-md cursor-pointer transition-colors shadow-sm ${isMonitoring ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30' : 'bg-slate-800 text-slate-500 hover:bg-slate-700 border border-slate-700'}`;
                 monitorBtn.innerText = isMonitoring ? '🔔 Alerts ON' : '🔕 Alerts OFF';
 
-                document.getElementById(`exe-name-${pc.id}`).innerText = exeName;
-                document.getElementById(`exe-path-${pc.id}`).innerText = pc.current_exe || 'Location Unavailable';
-                document.getElementById(`window-title-${pc.id}`).innerText = pc.current_window ? `"${pc.current_window}"` : 'No Visual Title';
-                document.getElementById(`preferred-exe-${pc.id}`).innerText = hasPreferred ? extractExeName(pc.preferred_exe) : 'Not Set';
+                document.getElementById(esc('exe-name', pc.id)).innerText = exeName;
+                document.getElementById(esc('exe-path', pc.id)).innerText = pc.current_exe || 'Location Unavailable';
+                document.getElementById(esc('window-title', pc.id)).innerText = pc.current_window ? `"${pc.current_window}"` : 'No Visual Title';
+                document.getElementById(esc('preferred-exe', pc.id)).innerText = hasPreferred ? extractExeName(pc.preferred_exe) : 'Not Set';
 
-                const winBox = document.getElementById(`window-box-${pc.id}`);
-                const mismatchBadge = document.getElementById(`mismatch-badge-${pc.id}`);
+                const winBox = document.getElementById(esc('window-box', pc.id));
+                const mismatchBadge = document.getElementById(esc('mismatch-badge', pc.id));
                 if (isMismatch) {
                     winBox.className = "border-rose-500 bg-rose-950/20 rounded-xl p-3 mb-6 transition-all duration-300 shadow-[0_0_15px_rgba(244,63,94,0.15)]";
                     mismatchBadge.classList.remove("hidden");
@@ -298,16 +359,17 @@
                 const headerState = JSON.stringify({ pc, editing: editingPCs[pc.id] });
                 if (headerStateCache[pc.id] !== headerState) {
                     headerStateCache[pc.id] = headerState;
-                    const headerContainer = document.getElementById(`pc-header-${pc.id}`);
+                    const headerContainer = document.getElementById(esc('pc-header', pc.id));
                     
                     if (editingPCs[pc.id]) {
                         headerContainer.innerHTML = `
                             <div class="flex flex-col gap-2 mt-1 w-full">
-                                <input type="text" id="pc-name-${pc.id}" value="${pc.name || pc.id}" placeholder="PC Name" class="text-sm font-bold bg-slate-950 border border-slate-700 rounded-lg p-2 focus:border-amber-500 focus:outline-none text-white w-full">
+                                <input type="text" id="${esc('pc-name', pc.id)}" value="${pc.name || pc.id}" placeholder="PC Name" class="text-sm font-bold bg-slate-950 border border-slate-700 rounded-lg p-2 focus:border-amber-500 focus:outline-none text-white w-full">
                                 <div class="flex gap-2">
                                     ${buildOwnerSelect(pc.id, pc.owner, 'pc')}
                                     <button onclick="savePC('${pc.id}')" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-3 rounded-lg text-xs cursor-pointer transition-colors">Save</button>
-                                    <button onclick="togglePCEdit('${pc.id}')" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 rounded-lg text-xs cursor-pointer transition-colors">Cancel</button>
+                                    <button onclick="confirmDeletePC('${pc.id}')" class="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 rounded-lg text-xs cursor-pointer transition-colors">Delete</button>
+                                    <button onclick="togglePCEdit('${pc.id}')" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 rounded-lg text-xs cursor-pointer transition-colors">✕</button>
                                 </div>
                             </div>
                         `;
@@ -322,12 +384,12 @@
                     }
                 }
 
-                document.getElementById(`hw-count-${pc.id}`).innerText = pcDevices.length;
+                document.getElementById(esc('hw-count', pc.id)).innerText = pcDevices.length;
                 const hwState = JSON.stringify({ pcDevices, editing: editingDevices, owners: teamOwners });
                 
                 if (hardwareStateCache[pc.id] !== hwState) {
                     hardwareStateCache[pc.id] = hwState; 
-                    const hwContainer = document.getElementById(`hw-list-${pc.id}`);
+                    const hwContainer = document.getElementById(esc('hw-list', pc.id));
                     
                     if (pcDevices.length === 0) {
                         hwContainer.innerHTML = `<div class="text-center py-4 text-xs text-slate-600 border border-dashed border-slate-800 rounded-xl">No hardware logged.</div>`;
@@ -342,7 +404,7 @@
                             const textStyle = isConnected ? 'text-slate-200' : 'text-rose-400';
                             
                             const vpLabels = (d.vid && d.pid)
-                                ? `<button onclick="lookupDevice('${d.vid}', '${d.pid}', '${d.id}')" class="text-amber-400 hover:underline cursor-pointer text-left">VID: ${d.vid} | PID: ${d.pid} 🔍</button>` 
+                                ? `<button onclick="lookupDevice('${d.vid}', '${d.pid}', '${d.id}')" class="text-amber-400 hover:underline cursor-pointer text-left font-mono">VID: ${d.vid} | PID: ${d.pid} 🔍</button>` 
                                 : `ID: ${d.id}`;
 
                             return `
@@ -357,7 +419,7 @@
                                             </div>
                                             <div class="text-[11px] font-mono opacity-70">
                                                 Brand: <b class="text-slate-300 mr-2">${d.manufacturer}</b> • ${vpLabels}
-                                                <div id="lookup-res-${d.id}" class="hidden mt-1 text-emerald-400"></div>
+                                                <div id="${esc('lookup-res', d.id)}" class="hidden mt-1 text-emerald-400 font-sans"></div>
                                             </div>
                                         </div>
                                         
@@ -365,13 +427,17 @@
                                             ${(isRegistered && !isEditing) ? `
                                                 <span class="text-[10px] uppercase font-bold text-slate-500 block">Owner</span>
                                                 <span class="text-xs font-bold text-white block">${d.owner || '-'}</span>
-                                                <button onclick="toggleEdit('${d.id}')" class="text-[10px] text-slate-400 hover:text-amber-400 underline font-medium mt-1 cursor-pointer">Edit</button>
+                                                <div class="flex gap-2 mt-1">
+                                                    <button onclick="toggleEdit('${d.id}')" class="text-[10px] text-slate-400 hover:text-amber-400 underline font-medium cursor-pointer">Edit</button>
+                                                    <button onclick="confirmDeleteDevice('${d.id}')" class="text-[10px] text-rose-400 hover:text-rose-300 underline font-medium cursor-pointer">Delete</button>
+                                                </div>
                                             ` : ''}
                                             
                                             <div class="flex gap-1 mt-1">
                                                 <button onclick="toggleIgnoreDevice('${d.id}')" title="Ignore device & stop alerts" class="text-[10px] bg-slate-800 hover:bg-rose-900/50 hover:text-rose-400 text-slate-400 transition-colors px-1.5 py-0.5 rounded cursor-pointer font-bold">🚫 Ignore</button>
                                                 ${!isRegistered ? `
                                                     <button onclick="dismissDevice('${d.id}')" title="Dismiss temporarily" class="text-slate-500 hover:text-rose-400 transition-colors px-1.5 py-0.5 cursor-pointer font-bold bg-slate-800 rounded">✕</button>
+                                                    <button onclick="confirmDeleteDevice('${d.id}')" title="Delete device permanently" class="text-rose-400 hover:text-rose-300 transition-colors px-1.5 py-0.5 cursor-pointer font-bold bg-slate-800 rounded">🗑️</button>
                                                 ` : ''}
                                             </div>
                                         </div>
@@ -379,9 +445,9 @@
 
                                     ${(!isRegistered || isEditing) ? `
                                         <div class="mt-3 pt-3 border-t border-slate-800/60 grid grid-cols-1 sm:grid-cols-4 gap-2">
-                                            <input type="text" id="dev-name-${d.id}" value="${d.name || d.manufacturer + ' ' + d.category}" placeholder="Device Label" class="col-span-1 sm:col-span-2 text-xs bg-slate-950 border border-slate-700 rounded-lg p-2 focus:border-amber-500 focus:outline-none text-slate-200">
+                                            <input type="text" id="${esc('dev-name', d.id)}" value="${d.name || d.manufacturer + ' ' + d.category}" placeholder="Device Label" class="col-span-1 sm:col-span-2 text-xs bg-slate-950 border border-slate-700 rounded-lg p-2 focus:border-amber-500 focus:outline-none text-slate-200">
                                             
-                                            <select id="dev-cat-${d.id}" class="text-xs bg-slate-950 border border-slate-700 rounded-lg p-2 focus:border-amber-500 focus:outline-none text-slate-200">
+                                            <select id="${esc('dev-cat', d.id)}" class="text-xs bg-slate-950 border border-slate-700 rounded-lg p-2 focus:border-amber-500 focus:outline-none text-slate-200">
                                                 ${CATEGORIES.map(c => `<option value="${c}" ${d.category === c ? 'selected' : ''}>${getEmoji(c)} ${c}</option>`).join('')}
                                             </select>
 
@@ -401,6 +467,13 @@
                     }
                 }
             });
+            
+            const activeCards = new Set(pcs.map(p => esc('pc-card', p.id)));
+            Array.from(container.children).forEach(child => {
+                if (child.id && child.id.startsWith("pc-card_") && !activeCards.has(child.id)) {
+                    child.remove();
+                }
+            });
         }
 
         function initializeWebSocket() {
@@ -412,7 +485,8 @@
                 loadInitialData();
             };
             socket.onmessage = (event) => {
-                if (["pc_updated", "window_changed", "hardware_changed"].includes(JSON.parse(event.data).type)) {
+                const msg = JSON.parse(event.data);
+                if (["pc_updated", "window_changed", "hardware_changed"].includes(msg.type)) {
                     loadInitialData();
                 }
             };
