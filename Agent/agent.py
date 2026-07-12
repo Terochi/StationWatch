@@ -27,8 +27,29 @@ settings = AgentSettings()
 SERVER_URL_RAW = "http://localhost:3000/" if settings.debug else settings.server_url
 SERVER_URL = SERVER_URL_RAW + "api/events"
 HEARTBEAT_URL = SERVER_URL_RAW + "api/heartbeat"
-HEARTBEAT_INTERVAL = 5
-DEVICE_ID = socket.gethostname()
+
+
+def exit_with_error(message):
+    sys.stderr.write(f"{message}\n")
+    exit(1)
+
+
+def get_machine_guid() -> str:
+    try:
+        key = win32api.RegOpenKeyEx(
+            win32con.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+            0,
+            win32con.KEY_READ | win32con.KEY_WOW64_64KEY
+        )
+        value, _ = win32api.RegQueryValueEx(key, "MachineGuid")
+        win32api.RegCloseKey(key)
+        return value
+    except Exception as e:
+        exit_with_error(f"Error retrieving MachineGuid: {e}")
+
+
+DEVICE_ID = get_machine_guid()
 
 EVENT_SYSTEM_FOREGROUND = 0x0003
 WINEVENT_OUTOFCONTEXT = 0x0000
