@@ -14,7 +14,7 @@ import os
 
 
 class ServerSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', extra='ignore')
+    model_config = SettingsConfigDict(env_file='.env.debug', env_file_encoding='utf-8', extra='ignore')
 
     debug: bool = True
     ntfy_url: str | None = None
