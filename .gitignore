@@ -7,4 +7,4 @@ Agent/main.spec
 monitoring.db
 usb.ids
 
-.env
+.env.*
