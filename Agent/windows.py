@@ -1,17 +1,27 @@
 import ctypes
 import ctypes.wintypes
 import socket
-import time
 import win32api
 import win32con
 import win32gui
 import win32process
 
-from Agent import helper, connection, devices
+import helper, connection, devices
 
 EVENT_SYSTEM_FOREGROUND = 0x0003
 WINEVENT_OUTOFCONTEXT = 0x0000
 WM_DEVICECHANGE = 0x0219
+DEVICE_NOTIFY_ALL_INTERFACE_CLASSES = 0x00000004
+
+
+class DEV_BROADCAST_DEVICEINTERFACE(ctypes.Structure):
+    _fields_ = [
+        ("dbcc_size", ctypes.wintypes.DWORD),
+        ("dbcc_devicetype", ctypes.wintypes.DWORD),
+        ("dbcc_reserved", ctypes.wintypes.DWORD),
+        ("dbcc_classguid", ctypes.c_byte * 16),
+        ("dbcc_name", ctypes.c_wchar * 1)
+    ]
 
 
 def get_hostname() -> str:
@@ -53,6 +63,18 @@ def callback_window_changed(hWinEventHook, event, hwnd, idObject, idChild, dwEve
         pass
 
 
+def register_device_notifications(hwnd):
+    filter_header = DEV_BROADCAST_DEVICEINTERFACE()
+    filter_header.dbcc_size = ctypes.sizeof(DEV_BROADCAST_DEVICEINTERFACE)
+    filter_header.dbcc_devicetype = 0x00000005
+
+    user32.RegisterDeviceNotificationW(
+        hwnd,
+        ctypes.byref(filter_header),
+        DEVICE_NOTIFY_ALL_INTERFACE_CLASSES
+    )
+
+
 def wndproc(hwnd, msg, wparam, lparam):
     if msg == WM_DEVICECHANGE:
         helper.start_thread(devices.process_hardware_change)
@@ -76,11 +98,13 @@ def start_message_pump():
         win32gui.RegisterClass(wc)
     except Exception:
         pass
+
     hwnd = win32gui.CreateWindow("HardwareListener", "HardwareListenerWindow", 0, 0, 0, 0, 0, 0, 0, wc.hInstance, None)
+
+    register_device_notifications(hwnd)
+
     try:
-        while True:
-            win32gui.PumpWaitingMessages()
-            time.sleep(0.5)
+        win32gui.PumpMessages()
     except KeyboardInterrupt:
         print("\nShutting down gracefully...")
 

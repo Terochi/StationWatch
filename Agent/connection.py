@@ -1,7 +1,7 @@
 import time
 import requests
 
-from Agent.agent import settings, DEVICE_ID
+from agent import settings, DEVICE_ID, DEVICE_NAME
 
 session = requests.Session()
 
@@ -35,5 +35,5 @@ def send_changed_devices(payload_connected, payload_disconnected):
 
 def heartbeat_loop():
     while True:
-        send_payload(HEARTBEAT_URL, {"status": "alive"})
+        send_payload(HEARTBEAT_URL, {"status": "alive", "device_name": DEVICE_NAME})
         time.sleep(settings.heartbeat_interval)

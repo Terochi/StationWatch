@@ -1,7 +1,9 @@
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from Agent import devices, helper, windows, connection
+import devices, helper, windows, connection
 
+load_dotenv()
 
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file_encoding='utf-8', extra='ignore')
@@ -14,10 +16,12 @@ class AgentSettings(BaseSettings):
 settings = AgentSettings()
 
 DEVICE_ID = windows.get_machine_guid()
+DEVICE_NAME = windows.get_hostname()
 
 
 def main():
     print(f"Starting Agent for {DEVICE_ID}...")
+    print(f"Connecting to {settings.server_url}...")
     print("Initializing hardware baseline silently...")
     devices.init()
     helper.start_thread(connection.heartbeat_loop)

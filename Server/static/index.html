@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardware Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+
+    <header class="mb-8 border-b border-slate-800 pb-4 flex justify-between items-end">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white">Hardware Command Center</h1>
+            <p class="text-sm text-slate-400">Hierarchical real-time device mapping matrix</p>
+        </div>
+        <div class="flex flex-col items-end gap-2">
+            <div class="flex items-center gap-3">
+                <div id="connection-status" class="flex items-center gap-2 bg-rose-500/10 text-rose-400 px-3 py-1 rounded-full text-xs font-medium border border-rose-500/20">
+                    <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> Offline
+                </div>
+                <button id="global-alerts-btn" onclick="toggleAllMonitoring()" class="flex items-center gap-2 bg-slate-800 text-slate-400 hover:bg-slate-700 px-3 py-1 rounded-full text-xs font-medium border border-slate-700 transition-colors cursor-pointer">
+                    🔔 Enable All Alerts
+                </button>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="toggleIgnoredModal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-semibold py-1.5 px-4 rounded-md border border-slate-700 transition-colors cursor-pointer shadow-sm">
+                    👁️ Ignored Devices
+                </button>
+                <button onclick="toggleTeamModal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-semibold py-1.5 px-4 rounded-md border border-slate-700 transition-colors cursor-pointer shadow-sm">
+                    👥 Manage Team
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="ignored-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-xl shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-white">Ignored Hardware</h2>
+                <button onclick="toggleIgnoredModal()" class="text-slate-400 hover:text-white cursor-pointer font-bold">✕</button>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">These devices are hidden from the main dashboard and will not trigger Ntfy alerts.</p>
+            <div id="ignored-list" class="space-y-2 max-h-80 overflow-y-auto pr-1"></div>
+        </div>
+    </div>
+
+    <div id="team-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-md shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-white">Manage Owners</h2>
+                <button onclick="toggleTeamModal()" class="text-slate-400 hover:text-white cursor-pointer font-bold">✕</button>
+            </div>
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="new-owner-name" placeholder="New Person's Name" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm focus:border-amber-500 focus:outline-none text-slate-200">
+                <button onclick="addOwner()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-sm cursor-pointer transition-colors">Add</button>
+            </div>
+            <div id="owners-list" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center">
+        <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-sm shadow-2xl">
+            <h3 id="confirm-title" class="text-base font-bold text-white mb-2">Are you sure?</h3>
+            <p id="confirm-message" class="text-xs text-slate-400 mb-6"></p>
+            <div class="flex justify-end gap-3">
+                <button onclick="hideConfirm()" class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-semibold py-1.5 px-4 rounded-md border border-slate-700 cursor-pointer transition-colors">Cancel</button>
+                <button id="confirm-action-btn" class="text-xs bg-rose-600 hover:bg-rose-500 text-white font-bold py-1.5 px-4 rounded-md cursor-pointer transition-colors">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <main>
+        <div id="pcs-container" class="grid grid-cols-1 xl:grid-cols-2 gap-6"></div>
+    </main>
+
+    <script src="/env.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
